@@ -23,6 +23,7 @@ import sys, os, time
 
 class PreProcessing:
     
+    AuxDescriptive = None
     Descriptive = None 
     Target = None
     
@@ -116,7 +117,7 @@ class PreProcessing:
         
         self.Descriptive = aux_database.iloc[:,0:self.NColumns].values
         self.Target = database.iloc[:,self.NColumns].values
-       
+        self.AuxDescriptive =  aux_database.iloc[:,0:self.NColumns].values
         self.flagDataset = 1
         # return database
         
@@ -192,7 +193,7 @@ class Processing:
         
     def kNN(self):
         numberNeighbors = int(self.Neighbors)
-        self.Classifier = KNeighborsClassifier(n_neighbors=numberNeighbors, metric='minkowski', p=2)
+        self.Classifier = KNeighborsClassifier(n_neighbors=numberNeighbors, metric='minkowski', p=2, n_jobs = 1)
     
     def calculate(self, algorithm):
         start_time = time.time()
@@ -279,12 +280,14 @@ def menu1():
     return
 
 def menu2():
+    PP.Descriptive = PP.AuxDescriptive
+   
     print ('Selecionar precisão')
     print ('1. labelEncoder')
     print ('2. labelEncoder + standardScaler')
     print ('3. labelEncoder + oneHotEncoder')
     print ('4. labelEncoder + oneHotEncoder + standardScaler')
-    print ('9. Voltar')
+    print ('9. Voltar(Dataset original)')
     print ('0. Sair' )
     choice = input(' >>  ')
     action_precision(choice)
@@ -361,6 +364,7 @@ def action_precision(ch):
     ch = ch.lower()
     os.system('clear')
     
+     
     if PP.flagDataset == 0:
         print('Deve selecionar um dataset primeiro!\n')
         menu1()
@@ -426,7 +430,7 @@ def action_algorithm(ch):
   
     try:
         testSize = float(input('Insira o tamanho de testes(ex: 0.25): ' ))
-        if testSize<0 or testSize >1:
+        if testSize<=0 or testSize >1:
             print("Entre um número decimal entre 0 e 1")
             menu3()
     except ValueError:
