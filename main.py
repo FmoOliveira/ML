@@ -10,13 +10,15 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 
-from sklearn.impute import SimpleImputer
+from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.preprocessing import OrdinalEncoder
+
 from scipy.sparse import csr_matrix
 
 import pandas as pd
 import numpy as np
 
-import sys, os
+import sys, os, time
 
 
 class PreProcessing:
@@ -25,10 +27,30 @@ class PreProcessing:
     Target = None
     
     
-    NColunas = 0
+    NColumns = 0
     flagDataset = 0
     flagPrecision = 0
+    CategoricalColumns =  []
     
+    def getCategorical(self, database):
+        #database = pd.read_csv(file, header=None)
+        # print("Dataset specifications \n")
+        # print(database.info())
+        # print("\n")
+        
+        numCols = len(database.columns) - 1
+        self.CategoricalColumns=list(database.select_dtypes(include='object').columns)
+        
+        #retirar o indice da ultima coluna(target)
+        try:
+            self.CategoricalColumns.remove(numCols)
+        except ValueError:
+            print("Coluna " + str(numCols) + " não faz parte da lista...")
+             
+        
+        self.NColumns = numCols
+        
+        
     
     #get column indexs search by val
     def getColumnsByVal(self, database, value):
@@ -38,42 +60,84 @@ class PreProcessing:
         columnIndexes = list(obj[obj == True ].index)
         return columnIndexes
     
-    def cleanDataset(self, database):
-        print("Dataset com valores nulos(?), limpeza em curso...")
-        imp = SimpleImputer(missing_values = ' ?', strategy= 'most_frequent')
+    def cleanDatasetMostFrequent(self, database):
+       
+        imp = SimpleImputer(missing_values = np.nan , strategy= 'most_frequent')
         dsAux = imp.fit_transform(database)
         database = pd.DataFrame(dsAux, index = database.index, columns=database.columns)
         return database
         
+    def cleanDatasetReplaceByZero(self, database):
+        database = database.fillna('0')
+        return database
+    
+    def preEncode(self,data):
+        encoder = OrdinalEncoder()
+        '''function to encode non-null data and replace it in the original data'''
+        #retains only non-null values
+        nonulls = np.array(data.dropna())
+        #reshapes the data for encoding
+        impute_reshape = nonulls.reshape(-1,1)
+        #encode date
+        impute_ordinal = encoder.fit_transform(impute_reshape)
+        #Assign back encoded values to non-null values
+        data.loc[data.notnull()] = np.squeeze(impute_ordinal)
+        return data
+    
+    def cleanDatasetKNNBased(self, database):
+       
+        imputer = KNNImputer(n_neighbors=100) #n_neighbors=2
+        database = database.drop([self.NColumns], axis=1)
+        #database = imputer.fit_transform(database)
+        for columns in self.CategoricalColumns:
+           self.preEncode(database[columns])
+        
+        encode_data = pd.DataFrame(np.round(imputer.fit_transform(database)),columns = database.columns)
+        print("pre_encode")
+        return encode_data
+        
     
     def readDataset(self, file):
-        database = pd.read_csv(file, header=None)
+        database = pd.read_csv(file, header=None, na_values=" ?")
+        self.getCategorical(database)
+        #check if has null values(' ?' ==> nan )
+        if database.isnull().values.any():
+            print("Dataset com valores nulos, limpeza em curso...")
+            aux_database=self.cleanDatasetMostFrequent(database)
+            # aux_database=self.cleanDatasetReplaceByZero(database)
+            # aux_database = self.cleanDatasetKNNBased(database)
+        else:
+            print("Dataset sem valores nulos!")
+            aux_database = database
+            
+        # print(aux_database.head(50))
+        print("Número de colunas: " + str(self.NColumns) + "\n")
+        print("Lista Colunas Categóricas:" + str(self.CategoricalColumns))
         
-        #check if has null values( ?)
-        hasNulls = len(self.getColumnsByVal(database, ' ?')) > 0
-        if hasNulls:
-            database = self.cleanDataset(database)
-        
-        
-        numCols = len(database.columns) - 1
+        self.Descriptive = aux_database.iloc[:,0:self.NColumns].values
+        self.Target = database.iloc[:,self.NColumns].values
        
-        self.Descriptive = database.iloc[:,0:numCols].values
-        self.Target = database.iloc[:,numCols].values
-        self.NColunas = numCols
         self.flagDataset = 1
+        # return database
+        
 
-         
+        
     def labelEncoder(self):
+        
         le = LabelEncoder()
-        for i in range(self.NColunas):
-            self.Descriptive[:,i] = le.fit_transform(self.Descriptive[:,i])
+        if len(self.CategoricalColumns):#apenas aplica o label encoder nas colunas do tipo categoricas
+            print("Label encoding...\n")
+            for i in self.CategoricalColumns:
+            # for i in range(self.NColumns):
+                self.Descriptive[:,i] = le.fit_transform(self.Descriptive[:,i])
         
         
-       
-   
+    #duvida ---> deve-se aplicar a todas as colunas ? categóricas e continuas  -->self.CategoricalColumns
     def oneHotEncoder(self):
-         he = ColumnTransformer([('one_hot_encoder',OneHotEncoder(), list(range(self.NColunas)))], remainder='passthrough') #kill warning
-         self.Descriptive = he.fit_transform(self.Descriptive)
+        #list(range(self.NColumns))
+        he = ColumnTransformer([('one_hot_encoder',OneHotEncoder(), list(range(self.NColumns)) )], remainder='passthrough') #kill warning
+        # he = ColumnTransformer([('one_hot_encoder',OneHotEncoder(), self.CategoricalColumns )], remainder='passthrough')
+        self.Descriptive = he.fit_transform(self.Descriptive)
          
  
         
@@ -112,7 +176,7 @@ class Processing:
   
         
     def toDense(self,matrix):
-        A = csr_matrix(matrix)
+        A = csr_matrix(matrix,dtype=float)
         Aux = A.todense()
         return Aux
         
@@ -131,6 +195,7 @@ class Processing:
         self.Classifier = KNeighborsClassifier(n_neighbors=numberNeighbors, metric='minkowski', p=2)
     
     def calculate(self, algorithm):
+        start_time = time.time()
         if algorithm == 'naiveBayes':
             self.naiveBayes()
         if algorithm == 'decisionTree':
@@ -145,7 +210,8 @@ class Processing:
         
         descriptiveTraining = self.toDense(descriptiveTraining)
         descriptiveTest = self.toDense(descriptiveTest)
-
+        
+        # descriptiveTraining = descriptiveTraining.toarray()
         #get prediction
         self.Classifier.fit(descriptiveTraining, targetTraining)
         
@@ -154,19 +220,36 @@ class Processing:
         matrix = confusion_matrix(targetTest,prediction)
         
         print("Prediction:\n" + str(prediction) + "\n")
+        print("Target:\n" + str(targetTest) +"\n")
         print("Accuracy: " + str(round(accuracy,2)) + "\n")
         print("Matrix:\n" + str(matrix) + "\n") 
-        
+        print("--- %s segundos ---" % (time.time() - start_time))
     
         
        
  
     
+
+
+#############################TEST AREA#########################################
+# PP = PreProcessing()
+# PP.readDataset('.\\datasets\\adult.data')
+# # # PP.getInfo('.\\datasets\\adult.data')
+# # # PP.getInfo('.\\datasets\\lymphography.data')
+# # a = PP.Descriptive
+# PP.encoder('labelEncoder')
+# # b = PP.Descriptive
+# PP.encoder('oneHotEncoder')
+# # c = PP.Descriptive
+# #PP.encoder('standardScaler')
+# d = PP.Descriptive
+
+# P = Processing(PP.Descriptive, PP.Target, 0.25)
+# P.calculate('naiveBayes')
+
+###############################################################################
 menu_actions  = {}
 PP = PreProcessing()
-
-
-
 def main_menu():
     os.system('clear')
     
@@ -360,15 +443,7 @@ def action_algorithm(ch):
     
 
 
-if __name__ == '__main__':
-    # Launch main menu
+if __name__ == '__main__':  
     main_menu()
     
-# PP = PreProcessing()
-# PP.readDataset('.\\datasets\\lymphography.data')
-# PP.encoder('labelEncoder')
-# PP.encoder('oneHotEncoder')
 
-
-# P = Processing(PP.Descriptive, PP.Target, 0.25)
-# P.calculate('naiveBayes')
