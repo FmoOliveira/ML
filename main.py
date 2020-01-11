@@ -38,7 +38,7 @@ class PreProcessing:
         # print("Dataset specifications \n")
         # print(database.info())
         # print("\n")
-        
+       
         numCols = len(database.columns) - 1
         self.CategoricalColumns=list(database.select_dtypes(include='object').columns)
         
@@ -101,6 +101,17 @@ class PreProcessing:
     def readDataset(self, file):
         database = pd.read_csv(file, header=None, na_values=" ?")
         self.getCategorical(database)
+        
+        lymphographyColumnsNames = ['class','lymphatics','block_of_affere','bl_of_lymph_c','bl_of_lymph_s','by_pass','extravasates','regeneration_of','early_uptake_in','lym_nodes_dimin','lym_nodes_enlar','changes_in_lym','defect_in_node','changes_in_node','changes_in_stru','special_forms','dislocation_of','exclusion_of_no',' no_of_nodes']
+        
+        adultColumnsNames = ['age','workclass','fnlwgt','education','education-num','marital-status','occupation','relationship','race','sex','capital-gain','capital-loss','hours-per-week','native-country','result']
+        
+        if file =='.\\datasets\\lymphography.data':
+            database.columns = lymphographyColumnsNames
+        else:
+            database.columns = adultColumnsNames
+            
+        # print(database)   
         #check if has null values(' ?' ==> nan )
         if database.isnull().values.any():
             print("Dataset com valores nulos, limpeza em curso...")
