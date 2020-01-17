@@ -108,8 +108,10 @@ class PreProcessing:
         
         if file =='.\\datasets\\lymphography.data':
             database.columns = lymphographyColumnsNames
+            myTarget = 0
         else:
             database.columns = adultColumnsNames
+            myTarget = 14
             
         # print(database)   
         #check if has null values(' ?' ==> nan )
@@ -126,9 +128,21 @@ class PreProcessing:
         print("Número de colunas: " + str(self.NColumns) + "\n")
         print("Lista Colunas Categóricas:" + str(self.CategoricalColumns))
         
-        self.Descriptive = aux_database.iloc[:,0:self.NColumns].values
-        self.Target = database.iloc[:,self.NColumns].values
-        self.AuxDescriptive =  aux_database.iloc[:,0:self.NColumns].values
+        
+        #para o dataset lymphography como target utilizamos a 1ª coluna
+        if myTarget == 14:
+            self.Descriptive = aux_database.iloc[:,0:self.NColumns].values
+            self.Target = database.iloc[:,self.NColumns].values
+            
+            self.AuxDescriptive =  aux_database.iloc[:,0:self.NColumns].values
+        else:
+            self.Descriptive = aux_database.iloc[:,1:self.NColumns].values
+            self.Target = database.iloc[:,0].values
+            
+            self.AuxDescriptive =  aux_database.iloc[:,1:self.NColumns].values
+        
+        
+        
         self.flagDataset = 1
         # return database
         
@@ -147,7 +161,7 @@ class PreProcessing:
     #duvida ---> deve-se aplicar a todas as colunas ? categóricas e continuas  -->self.CategoricalColumns
     def oneHotEncoder(self):
         #list(range(self.NColumns))
-        he = ColumnTransformer([('one_hot_encoder',OneHotEncoder(), list(range(self.NColumns)) )], remainder='passthrough') #kill warning
+        he = ColumnTransformer([('one_hot_encoder',OneHotEncoder(), list(range(self.NColumns - 1)) )], remainder='passthrough') #kill warning
         # he = ColumnTransformer([('one_hot_encoder',OneHotEncoder(), self.CategoricalColumns )], remainder='passthrough')
         self.Descriptive = he.fit_transform(self.Descriptive)
          
